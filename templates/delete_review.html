@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Delete Review</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input[type="number"] {
+            width: 100px;
+            padding: 5px;
+        }
+        button {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #c82333;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <h1>Delete Review</h1>
+    <div class="form-group">
+        <label for="reviewId">Review ID:</label>
+        <input type="number" id="reviewId" min="1" required>
+    </div>
+    <button onclick="deleteReview()">Delete Review</button>
+    <div id="result" style="display: none;"></div>
+
+    <script>
+        async function deleteReview() {
+            const reviewId = document.getElementById('reviewId').value;
+            const resultDiv = document.getElementById('result');
+            
+            if (!reviewId) {
+                showResult('Please enter a review ID', false);
+                return;
+            }
+
+            try {
+                const response = await fetch(`http://localhost:5001/api/review/${reviewId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    showResult(data.message, true);
+                } else {
+                    showResult(data.error || 'Failed to delete review', false);
+                }
+            } catch (error) {
+                showResult('Error connecting to server', false);
+            }
+        }
+
+        function showResult(message, success) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.textContent = message;
+            resultDiv.className = success ? 'success' : 'error';
+            resultDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html> 

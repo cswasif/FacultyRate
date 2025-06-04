@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Faculty Rating Analysis</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .drop-zone {
+            border: 2px dashed #cbd5e0;
+            transition: all 0.3s ease;
+            min-height: 200px;
+        }
+        .drop-zone:hover {
+            border-color: #4299e1;
+        }
+        .loading {
+            display: none;
+        }
+        .loading.active {
+            display: flex;
+        }
+        .preview-image {
+            max-width: 200px;
+            max-height: 200px;
+            object-fit: contain;
+            margin: 10px;
+        }
+        .image-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .image-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        .remove-image {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            background: red;
+            color: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            text-align: center;
+            line-height: 24px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-center mb-8">Faculty Rating Analysis</h1>
+        
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+            <div class="mb-6">
+                <label for="faculty-name" class="block text-sm font-medium text-gray-700 mb-2">Faculty Name (e.g., ARD, KKP)</label>
+                <input type="text" id="faculty-name" name="faculty-name" required
+                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter faculty name">
+            </div>
+
+            <div class="mb-6">
+                <label for="course-codes" class="block text-sm font-medium text-gray-700 mb-2">Course Codes (optional)</label>
+                <div id="course-inputs" class="space-y-2">
+                    <div class="flex items-center gap-2">
+                        <input type="text" class="course-code w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Enter course code (e.g., CSE391)">
+                        <button type="button" class="add-course bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition-colors">
+                            +
+                        </button>
+                    </div>
+                </div>
+                <p class="text-sm text-gray-500 mt-1">Add multiple courses to analyze specific courses</p>
+            </div>
+
+            <div id="drop-zone" class="drop-zone flex flex-col items-center justify-center cursor-pointer rounded-lg p-6">
+                <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                </svg>
+                <p class="mt-4 text-gray-600">Drag & drop PNG images or click to upload</p>
+                <p class="text-sm text-gray-500 mt-2">You can also paste (Ctrl+V) screenshots directly</p>
+            </div>
+            <input type="file" id="file-input" class="hidden" accept="image/png" multiple>
+            
+            <div id="image-preview" class="image-container"></div>
+
+            <div class="flex justify-center mt-6">
+                <button id="analyze-btn" class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-colors disabled:bg-gray-400" disabled>
+                    Analyze Images
+                </button>
+            </div>
+        </div>
+
+        <div id="loading" class="loading flex-col items-center justify-center mb-8">
+            <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+            <p class="mt-4 text-gray-600">Analyzing images...</p>
+        </div>
+
+        <div id="results" class="bg-white rounded-lg shadow-lg p-6 mb-8 hidden">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-semibold">Faculty Review Analysis</h2>
+                <div class="space-x-2">
+                    <button id="delete-reviews-btn" class="bg-yellow-500 text-white px-4 py-2 rounded-lg hover:bg-yellow-600 transition-colors">
+                        Delete Reviews
+                    </button>
+                    <button id="delete-faculty-btn" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors">
+                        Delete Faculty
+                    </button>
+                </div>
+            </div>
+            <pre id="analysis-text" class="whitespace-pre-wrap font-mono text-gray-800 bg-gray-50 p-4 rounded-lg"></pre>
+        </div>
+    </div>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const imagePreview = document.getElementById('image-preview');
+        const analyzeBtn = document.getElementById('analyze-btn');
+        const deleteReviewsBtn = document.getElementById('delete-reviews-btn');
+        const deleteFacultyBtn = document.getElementById('delete-faculty-btn');
+        const loading = document.getElementById('loading');
+        const results = document.getElementById('results');
+        const analysisText = document.getElementById('analysis-text');
+        const courseInputs = document.getElementById('course-inputs');
+        let uploadedImages = new Map(); // Changed to Map to store both name and blob
+
+        // Add course input functionality
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('add-course')) {
+                const newInput = document.createElement('div');
+                newInput.className = 'flex items-center gap-2';
+                newInput.innerHTML = `
+                    <input type="text" class="course-code w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter course code (e.g., CSE391)">
+                    <button type="button" class="remove-course bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition-colors">
+                        ×
+                    </button>
+                `;
+                courseInputs.appendChild(newInput);
+            } else if (e.target.classList.contains('remove-course')) {
+                e.target.parentElement.remove();
+            }
+        });
+
+        // Auto uppercase course codes
+        courseInputs.addEventListener('input', function(e) {
+            if (e.target.classList.contains('course-code')) {
+                e.target.value = e.target.value.toUpperCase();
+            }
+        });
+
+        function updateAnalyzeButton() {
+            analyzeBtn.disabled = uploadedImages.size === 0;
+        }
+
+        function addImagePreview(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'image-wrapper';
+
+                const img = document.createElement('img');
+                img.src = e.target.result;
+                img.className = 'preview-image';
+                
+                const removeBtn = document.createElement('button');
+                removeBtn.className = 'remove-image';
+                removeBtn.innerHTML = '×';
+                removeBtn.onclick = function() {
+                    wrapper.remove();
+                    uploadedImages.delete(file.name);
+                    updateAnalyzeButton();
+                };
+
+                wrapper.appendChild(img);
+                wrapper.appendChild(removeBtn);
+                imagePreview.appendChild(wrapper);
+                
+                // Store the file blob
+                file.arrayBuffer().then(buffer => {
+                    uploadedImages.set(file.name, new Blob([buffer], { type: 'image/png' }));
+                    updateAnalyzeButton();
+                });
+            };
+            reader.readAsDataURL(file);
+        }
+
+        dropZone.onclick = () => fileInput.click();
+
+        dropZone.ondragover = (e) => {
+            e.preventDefault();
+            dropZone.classList.add('border-blue-500');
+        };
+
+        dropZone.ondragleave = () => {
+            dropZone.classList.remove('border-blue-500');
+        };
+
+        dropZone.ondrop = (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('border-blue-500');
+            const files = [...e.dataTransfer.files].filter(file => file.type === 'image/png');
+            files.forEach(addImagePreview);
+        };
+
+        fileInput.onchange = () => {
+            const files = [...fileInput.files].filter(file => file.type === 'image/png');
+            files.forEach(addImagePreview);
+        };
+
+        document.onpaste = (e) => {
+            const items = e.clipboardData.items;
+            for (let item of items) {
+                if (item.type.includes('image')) {
+                    const file = item.getAsFile();
+                    const renamedFile = new File([file], `pasted-${Date.now()}.png`, { type: 'image/png' });
+                    addImagePreview(renamedFile);
+                }
+            }
+        };
+
+        analyzeBtn.onclick = async () => {
+            const facultyName = document.getElementById('faculty-name').value.trim().toUpperCase();
+            const courseCodes = Array.from(document.querySelectorAll('.course-code'))
+                .map(input => input.value.trim())
+                .filter(code => code !== '');
+
+            if (!facultyName) {
+                alert('Please enter a faculty name');
+                return;
+            }
+
+            loading.classList.add('active');
+            results.classList.add('hidden');
+            analysisText.textContent = '';
+
+            const formData = new FormData();
+            formData.append('faculty_name', facultyName);
+            courseCodes.forEach((code, index) => {
+                formData.append(`course_codes[${index}]`, code);
+            });
+            
+            // Add all stored images to FormData
+            let index = 0;
+            for (let [name, blob] of uploadedImages) {
+                formData.append('images', new File([blob], `image-${index}.png`, { type: 'image/png' }));
+                index++;
+            }
+
+            try {
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                // Clear any previous results
+                analysisText.textContent = '';
+                
+                if (data.analysis) {
+                    // Show the analysis results
+                    analysisText.textContent = data.analysis;
+                    results.classList.remove('hidden');
+                } else {
+                    throw new Error('No analysis results received');
+                }
+            } catch (error) {
+                analysisText.textContent = `Error: ${error.message}`;
+                results.classList.remove('hidden');
+            } finally {
+                loading.classList.remove('active');
+            }
+        };
+
+        // Add delete reviews functionality
+        deleteReviewsBtn.onclick = async () => {
+            const facultyName = document.getElementById('faculty-name').value.trim().toUpperCase();
+            if (!facultyName) {
+                alert('Please enter a faculty name');
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to delete all reviews for ${facultyName}?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/delete_reviews/${facultyName}`, {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                alert(data.message);
+                // Clear the results
+                results.classList.add('hidden');
+                analysisText.textContent = '';
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        };
+
+        // Add delete faculty functionality
+        deleteFacultyBtn.onclick = async () => {
+            const facultyName = document.getElementById('faculty-name').value.trim().toUpperCase();
+            if (!facultyName) {
+                alert('Please enter a faculty name');
+                return;
+            }
+
+            if (!confirm(`WARNING: This will permanently delete faculty ${facultyName} and ALL their reviews. Are you sure?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/delete_faculty/${facultyName}`, {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                alert(data.message);
+                // Clear the results and faculty name
+                results.classList.add('hidden');
+                analysisText.textContent = '';
+                document.getElementById('faculty-name').value = '';
+            } catch (error) {
+                alert(`Error: ${error.message}`);
+            }
+        };
+    </script>
+</body>
+</html> 
