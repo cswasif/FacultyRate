@@ -1,3 +1,30 @@
+"""
+FacultyRate Web Application
+=========================
+
+This module provides the web interface and core functionality for the FacultyRate system.
+It handles user interactions, file uploads, and AI-powered feedback analysis.
+
+Key Features:
+- Web interface for faculty rating submission and management
+- AI-powered feedback analysis using Google's Gemini models
+- Image processing capabilities for document uploads
+- Real-time faculty rating updates
+- Database cleanup and maintenance interface
+
+Technical Details:
+- Uses Flask for web framework
+- Integrates with Google's Gemini AI for text and image analysis
+- Implements file upload handling with size limits
+- Provides comprehensive error handling
+- Supports CORS for API access
+
+Environment Requirements:
+- GOOGLE_API_KEY must be set in .env file
+- Maximum file upload size: 32MB
+- Maximum files per upload: 10
+"""
+
 import os
 from flask import Flask, request, render_template, jsonify
 import google.generativeai as genai
@@ -83,7 +110,25 @@ def validate_course_codes(codes):
     return True, None
 
 def analyze_feedback(text, faculty_name, course_codes=None):
-    """Analyze feedback text using Gemini"""
+    """
+    Analyze feedback text using Google's Gemini AI model.
+    
+    Args:
+        text (str): The feedback text to analyze
+        faculty_name (str): Name of the faculty member
+        course_codes (list, optional): List of relevant course codes
+        
+    Returns:
+        tuple: (ratings_dict, analysis_text, recommendation)
+            - ratings_dict: Dictionary containing numerical ratings
+            - analysis_text: Full analysis text from Gemini
+            - recommendation: Final recommendation for students
+            
+    Privacy:
+        - Automatically redacts student names and personal information
+        - Removes specific dates and class details
+        - Maintains academic focus while ensuring confidentiality
+    """
     try:
         # Use gemini-1.5-flash model
         model = genai.GenerativeModel('gemini-1.5-flash')

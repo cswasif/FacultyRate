@@ -1,3 +1,26 @@
+"""
+FacultyRate API Server
+=====================
+
+This module provides the REST API endpoints for the FacultyRate system.
+It handles all database operations, faculty management, and review processing.
+
+Key Features:
+- Faculty management (CRUD operations)
+- Review submission and retrieval
+- Rating calculations and updates
+- Database maintenance and cleanup
+- Course-specific review management
+
+Authentication and Security:
+- CORS enabled for cross-origin requests
+- Input validation for all endpoints
+- Standardized error responses
+- Database session management
+
+For detailed API documentation, visit the root endpoint (/).
+"""
+
 from flask import Flask, request, jsonify
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -708,7 +731,21 @@ def search_faculty_by_name(faculty_name):
 
 @app.route('/api/database/clean', methods=['POST'])
 def clean_database():
-    """Clean the entire database by dropping and recreating all tables"""
+    """Clean the database by removing all reviews and resetting faculty ratings.
+    
+    Returns:
+        JSON response with success/failure message and status code
+        
+    Response format:
+        {
+            "success": true/false,
+            "message": "Database cleaned successfully" or error message,
+            "stats": {
+                "reviews_deleted": number,
+                "faculty_reset": number
+            }
+        }
+    """
     try:
         with get_db_session() as session:
             # Delete all reviews first (due to foreign key constraints)

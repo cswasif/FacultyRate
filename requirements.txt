@@ -1,9 +1,21 @@
+# Web Framework and Extensions
 flask==3.0.2
 flask-cors==4.0.0
+werkzeug==3.0.1
+
+# Database
+sqlalchemy==2.0.27
+
+# AI and Image Processing
 google-generativeai==0.3.2
 pillow==10.2.0
-python-dotenv==1.0.1
-sqlalchemy==2.0.27
+
+# HTTP and Environment
 requests==2.31.0
 python-dotenv==1.0.1
-werkzeug==3.0.1 
+
+# Testing and Development
+pytest==8.0.0
+pytest-flask==1.3.0
+flake8==7.0.0
+black==24.1.1 
