@@ -3,70 +3,88 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Delete Faculty by ID</title>
+    <title>Delete Faculty - Faculty Rating System</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
 <body class="bg-gray-100 min-h-screen">
     <div class="container mx-auto px-4 py-8">
-        <h1 class="text-3xl font-bold text-center mb-8">Delete Faculty by ID</h1>
-        
-        <div class="bg-white rounded-lg shadow-lg p-6 mb-8 max-w-md mx-auto">
-            <div class="mb-6">
-                <label for="faculty-id" class="block text-sm font-medium text-gray-700 mb-2">Faculty ID</label>
-                <input type="number" id="faculty-id" name="faculty-id" required
-                    class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter faculty ID">
-            </div>
+        <div class="max-w-md mx-auto">
+            <h1 class="text-3xl font-bold text-center mb-8">Delete Faculty</h1>
+            
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <div class="mb-6">
+                    <label for="facultyName" class="block text-sm font-medium text-gray-700 mb-2">Faculty Name</label>
+                    <input type="text" id="facultyName" required
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
+                        placeholder="Enter faculty name (e.g., ARD)">
+                </div>
 
-            <div class="flex justify-center">
-                <button id="delete-btn" class="bg-red-500 text-white px-6 py-2 rounded-lg hover:bg-red-600 transition-colors">
-                    Delete Faculty
-                </button>
-            </div>
-        </div>
+                <div class="flex justify-between items-center">
+                    <button onclick="deleteFaculty()" 
+                        class="bg-red-500 text-white px-6 py-2 rounded-lg hover:bg-red-600 transition-colors">
+                        Delete Faculty
+                    </button>
+                    <a href="/" class="text-gray-600 hover:text-gray-800 transition-colors">
+                        Back to Home
+                    </a>
+                </div>
 
-        <div id="result" class="bg-white rounded-lg shadow-lg p-6 mb-8 max-w-md mx-auto hidden">
-            <pre id="result-text" class="whitespace-pre-wrap font-mono text-gray-800"></pre>
+                <div id="result" class="mt-4 p-4 rounded-lg hidden">
+                    <!-- Content will be added by JavaScript -->
+                </div>
+            </div>
         </div>
     </div>
 
     <script>
-        const deleteBtn = document.getElementById('delete-btn');
-        const result = document.getElementById('result');
-        const resultText = document.getElementById('result-text');
-
-        deleteBtn.onclick = async () => {
-            const facultyId = document.getElementById('faculty-id').value.trim();
-            if (!facultyId) {
-                alert('Please enter a faculty ID');
+        async function deleteFaculty() {
+            const facultyName = document.getElementById('facultyName').value.trim().toUpperCase();
+            const resultDiv = document.getElementById('result');
+            
+            if (!facultyName) {
+                showResult('Please enter a faculty name', false);
                 return;
             }
 
-            if (!confirm(`Are you sure you want to delete faculty with ID ${facultyId}?`)) {
+            if (!confirm(`Are you sure you want to delete faculty ${facultyName} and all their reviews? This action cannot be undone.`)) {
                 return;
             }
 
             try {
-                const response = await fetch(`/api/faculty/${facultyId}/delete`, {
-                    method: 'POST'
+                // First get the faculty ID
+                const searchResponse = await fetch(`http://localhost:5001/api/faculty/search/${facultyName}`);
+                const searchData = await searchResponse.json();
+
+                if (!searchResponse.ok) {
+                    showResult(searchData.error || 'Faculty not found', false);
+                    return;
+                }
+
+                const facultyId = searchData.faculty_id;
+
+                // Delete the faculty
+                const deleteResponse = await fetch(`http://localhost:5001/api/faculty/${facultyId}`, {
+                    method: 'DELETE'
                 });
-
-                const data = await response.json();
-                resultText.textContent = JSON.stringify(data, null, 2);
-                result.classList.remove('hidden');
-
-                if (response.ok) {
-                    alert(data.message);
-                    document.getElementById('faculty-id').value = '';
+                
+                const deleteData = await deleteResponse.json();
+                
+                if (deleteResponse.ok) {
+                    showResult(deleteData.message, true);
                 } else {
-                    alert(`Error: ${data.error}`);
+                    showResult(deleteData.error || 'Failed to delete faculty', false);
                 }
             } catch (error) {
-                resultText.textContent = `Error: ${error.message}`;
-                result.classList.remove('hidden');
-                alert(`Error: ${error.message}`);
+                showResult('Error connecting to server', false);
             }
-        };
+        }
+
+        function showResult(message, success) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.textContent = message;
+            resultDiv.className = `mt-4 p-4 rounded-lg ${success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
+            resultDiv.style.display = 'block';
+        }
     </script>
 </body>
 </html> 

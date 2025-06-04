@@ -57,33 +57,31 @@ def index():
 
 def update_faculty_ratings(faculty_id):
     """Update aggregate ratings for a faculty member"""
-    session = DBSession()
-    try:
+    with get_db_session() as session:
         faculty = session.get(Faculty, faculty_id)
         if faculty and faculty.reviews:
-            faculty.avg_teaching_effectiveness = mean([r.teaching_effectiveness for r in faculty.reviews])
-            faculty.avg_student_engagement = mean([r.student_engagement for r in faculty.reviews])
-            faculty.avg_clarity = mean([r.clarity for r in faculty.reviews])
-            faculty.avg_professionalism = mean([r.professionalism for r in faculty.reviews])
-            faculty.overall_rating = mean([
-                faculty.avg_teaching_effectiveness,
-                faculty.avg_student_engagement,
-                faculty.avg_clarity,
+            # Calculate averages from all reviews
+            reviews = faculty.reviews
+            faculty.avg_teaching_effectiveness = sum(r.teaching_effectiveness for r in reviews) / len(reviews)
+            faculty.avg_student_engagement = sum(r.student_engagement for r in reviews) / len(reviews)
+            faculty.avg_clarity = sum(r.clarity for r in reviews) / len(reviews)
+            faculty.avg_professionalism = sum(r.professionalism for r in reviews) / len(reviews)
+            faculty.overall_rating = (
+                faculty.avg_teaching_effectiveness +
+                faculty.avg_student_engagement +
+                faculty.avg_clarity +
                 faculty.avg_professionalism
-            ])
-            faculty.total_reviews = len(faculty.reviews)
+            ) / 4.0
+            faculty.total_reviews = len(reviews)
             session.commit()
-    finally:
-        session.close()
 
 def get_or_create_faculty(name, department=None):
     """Get existing faculty or create new one"""
-    session = DBSession()
-    try:
+    with get_db_session() as session:
         # Try to find existing faculty
         faculty = session.query(Faculty).filter(Faculty.name == name).first()
         
-        # If not found, create new faculty
+        # If not found, create new faculty with default values
         if not faculty:
             faculty = Faculty(
                 name=name,
@@ -100,8 +98,6 @@ def get_or_create_faculty(name, department=None):
             print(f"Created new faculty: {name}")
         
         return faculty.id
-    finally:
-        session.close()
 
 @app.route('/api/faculty', methods=['GET'])
 def get_all_faculty():
@@ -114,7 +110,13 @@ def get_all_faculty():
                     'id': f.id,
                     'name': f.name,
                     'department': f.department,
-                    'ratings': f.average_ratings,
+                    'ratings': {
+                        'teaching_effectiveness': float(f.avg_teaching_effectiveness or 0.0),
+                        'student_engagement': float(f.avg_student_engagement or 0.0),
+                        'clarity': float(f.avg_clarity or 0.0),
+                        'professionalism': float(f.avg_professionalism or 0.0),
+                        'overall': float(f.overall_rating or 0.0)
+                    },
                     'total_reviews': len(f.reviews)
                 } for f in faculty_list]
             })
@@ -170,45 +172,81 @@ def add_faculty():
 @app.route('/api/faculty/<faculty_id>/reviews', methods=['POST'])
 def add_faculty_review(faculty_id):
     """Add a new review for a faculty member"""
-    session = DBSession()
-    try:
-        # Check if faculty exists, if not and name is provided, create them
-        faculty = session.get(Faculty, faculty_id)
-        if not faculty:
-            if 'faculty_name' in request.json:
-                faculty_id = get_or_create_faculty(
-                    request.json['faculty_name'],
-                    request.json.get('department')
-                )
-                faculty = session.get(Faculty, faculty_id)
-            else:
-                return jsonify({'error': 'Faculty not found'}), 404
+    with get_db_session() as session:
+        try:
+            # Check if faculty exists, if not and name is provided, create them
+            faculty = session.get(Faculty, faculty_id)
+            if not faculty:
+                if 'faculty_name' in request.json:
+                    faculty_id = get_or_create_faculty(
+                        request.json['faculty_name'],
+                        request.json.get('department')
+                    )
+                    faculty = session.get(Faculty, faculty_id)
+                else:
+                    return jsonify({'error': 'Faculty not found'}), 404
+                
+            data = request.json
             
-        data = request.json
-        review = Review(
-            faculty_id=faculty_id,
-            course_code=data['course_code'],
-            teaching_effectiveness=data['ratings']['teaching_effectiveness'],
-            student_engagement=data['ratings']['student_engagement'],
-            clarity=data['ratings']['clarity'],
-            professionalism=data['ratings']['professionalism'],
-            feedback=data.get('feedback'),
-            recommendation=data.get('recommendation'),
-            source_type=data.get('source_type', 'direct_submission')
-        )
-        
-        session.add(review)
-        session.commit()
-        
-        # Update aggregate ratings
-        update_faculty_ratings(faculty_id)
-        
-        return jsonify({
-            'message': 'Review added successfully',
-            'review_id': review.id
-        })
-    finally:
-        session.close()
+            # Extract and validate ratings
+            ratings = data.get('ratings', {})
+            if not isinstance(ratings, dict):
+                return jsonify({'error': 'Invalid ratings format - must be a dictionary'}), 400
+                
+            # Ensure all required rating fields are present with valid values
+            required_ratings = ['teaching_effectiveness', 'student_engagement', 'clarity', 'professionalism']
+            for field in required_ratings:
+                if field not in ratings:
+                    return jsonify({'error': f'Missing required rating field: {field}'}), 400
+                try:
+                    ratings[field] = float(ratings[field])
+                    if not (0 <= ratings[field] <= 5):
+                        return jsonify({'error': f'Rating {field} must be between 0 and 5'}), 400
+                except (ValueError, TypeError):
+                    return jsonify({'error': f'Invalid value for rating {field}'}), 400
+                
+            # Create and add the review
+            review = Review(
+                faculty_id=faculty_id,
+                course_code=data.get('course_code', 'UNKNOWN'),
+                teaching_effectiveness=ratings['teaching_effectiveness'],
+                student_engagement=ratings['student_engagement'],
+                clarity=ratings['clarity'],
+                professionalism=ratings['professionalism'],
+                feedback=data.get('feedback'),
+                recommendation=data.get('recommendation'),
+                source_type=data.get('source_type', 'direct_submission')
+            )
+            
+            session.add(review)
+            session.commit()
+            
+            # Update aggregate ratings
+            update_faculty_ratings(faculty_id)
+            
+            # Return updated faculty data
+            faculty = session.get(Faculty, faculty_id)
+            return jsonify({
+                'message': 'Review added successfully',
+                'review_id': review.id,
+                'faculty': {
+                    'id': faculty.id,
+                    'name': faculty.name,
+                    'department': faculty.department,
+                    'ratings': {
+                        'teaching_effectiveness': float(faculty.avg_teaching_effectiveness),
+                        'student_engagement': float(faculty.avg_student_engagement),
+                        'clarity': float(faculty.avg_clarity),
+                        'professionalism': float(faculty.avg_professionalism),
+                        'overall': float(faculty.overall_rating)
+                    },
+                    'total_reviews': len(faculty.reviews)
+                }
+            })
+                
+        except Exception as e:
+            logging.error(f"Error in add_faculty_review: {str(e)}")
+            return jsonify({'error': str(e)}), 500
 
 @app.route('/api/verify-data', methods=['GET'])
 def verify_data():
@@ -667,6 +705,48 @@ def search_faculty_by_name(faculty_name):
         })
     finally:
         session.close()
+
+@app.route('/api/database/clean', methods=['POST'])
+def clean_database():
+    """Clean the entire database by dropping and recreating all tables"""
+    try:
+        with get_db_session() as session:
+            # Delete all reviews first (due to foreign key constraints)
+            session.query(Review).delete()
+            
+            # Update all faculty ratings to 0
+            faculty_list = session.query(Faculty).all()
+            for faculty in faculty_list:
+                faculty.avg_teaching_effectiveness = 0.0
+                faculty.avg_student_engagement = 0.0
+                faculty.avg_clarity = 0.0
+                faculty.avg_professionalism = 0.0
+                faculty.overall_rating = 0.0
+                faculty.total_reviews = 0
+            
+            # Delete all faculty
+            session.query(Faculty).delete()
+            session.commit()
+            
+            # Verify cleanup
+            remaining_faculty = session.query(Faculty).count()
+            remaining_reviews = session.query(Review).count()
+            
+            if remaining_faculty > 0 or remaining_reviews > 0:
+                raise Exception(f"Database not fully cleaned. Remaining: {remaining_faculty} faculty, {remaining_reviews} reviews")
+            
+            return jsonify({
+                'message': 'Database cleaned successfully',
+                'status': 'success',
+                'remaining_faculty': 0,
+                'remaining_reviews': 0
+            })
+    except Exception as e:
+        logging.error(f"Error cleaning database: {str(e)}")
+        return jsonify({
+            'error': f'Failed to clean database: {str(e)}',
+            'status': 'error'
+        }), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5001) 

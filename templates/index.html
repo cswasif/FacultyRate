@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Faculty Rating Analysis</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <style>
         .drop-zone {
@@ -113,6 +114,35 @@
                 </div>
             </div>
             <pre id="analysis-text" class="whitespace-pre-wrap font-mono text-gray-800 bg-gray-50 p-4 rounded-lg"></pre>
+        </div>
+
+        <!-- Faculty Ratings Table -->
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-semibold">Faculty Ratings Overview</h2>
+                <button id="cleanDatabaseBtn" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 transition-colors">
+                    Clean Database
+                </button>
+            </div>
+            <div class="overflow-x-auto">
+                <table id="facultyTable" class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teaching</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Engagement</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Clarity</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Professionalism</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Overall</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reviews</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <!-- Faculty rows will be dynamically added here -->
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -270,6 +300,18 @@
                     // Show the analysis results
                     analysisText.textContent = data.analysis;
                     results.classList.remove('hidden');
+                    
+                    // Update faculty table with new data
+                    if (data.faculty_list) {
+                        updateFacultyTable(data.faculty_list);
+                    } else {
+                        // If faculty_list not in response, fetch latest data
+                        const facultyResponse = await fetch('/api/faculty');
+                        const facultyData = await facultyResponse.json();
+                        if (facultyData.faculty) {
+                            updateFacultyTable(facultyData.faculty);
+                        }
+                    }
                 } else {
                     throw new Error('No analysis results received');
                 }
@@ -307,6 +349,13 @@
                 // Clear the results
                 results.classList.add('hidden');
                 analysisText.textContent = '';
+                
+                // Refresh faculty table
+                const facultyResponse = await fetch('/api/faculty');
+                const facultyData = await facultyResponse.json();
+                if (facultyData.faculty) {
+                    updateFacultyTable(facultyData.faculty);
+                }
             } catch (error) {
                 alert(`Error: ${error.message}`);
             }
@@ -339,10 +388,129 @@
                 results.classList.add('hidden');
                 analysisText.textContent = '';
                 document.getElementById('faculty-name').value = '';
+                
+                // Refresh faculty table
+                const facultyResponse = await fetch('/api/faculty');
+                const facultyData = await facultyResponse.json();
+                if (facultyData.faculty) {
+                    updateFacultyTable(facultyData.faculty);
+                }
             } catch (error) {
                 alert(`Error: ${error.message}`);
             }
         };
+
+        function updateFacultyTable(facultyList) {
+            const tableBody = document.querySelector('#facultyTable tbody');
+            if (!tableBody) return;
+
+            // Clear existing rows
+            tableBody.innerHTML = '';
+
+            // Sort faculty list by name
+            facultyList.sort((a, b) => a.name.localeCompare(b.name));
+
+            // Add new rows
+            facultyList.forEach(faculty => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap">${faculty.name}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${faculty.department || 'N/A'}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${faculty.ratings.teaching_effectiveness.toFixed(1)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${faculty.ratings.student_engagement.toFixed(1)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${faculty.ratings.clarity.toFixed(1)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${faculty.ratings.professionalism.toFixed(1)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${faculty.ratings.overall.toFixed(1)}</td>
+                    <td class="px-6 py-4 whitespace-nowrap">${faculty.total_reviews}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        // Add this to your existing JavaScript
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const submitButton = document.querySelector('button[type="submit"]');
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                submitButton.disabled = true;
+                submitButton.innerHTML = 'Analyzing...';
+                
+                const response = await fetch('/analyze', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    resultDiv.innerHTML = `<div class="text-red-600 whitespace-pre-wrap">${data.error}</div>`;
+                } else {
+                    resultDiv.innerHTML = `<div class="whitespace-pre-wrap">${data.analysis}</div>`;
+                    // Update faculty table with new data
+                    if (data.faculty_list) {
+                        updateFacultyTable(data.faculty_list);
+                    }
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="text-red-600">Error: ${error.message}</div>`;
+            } finally {
+                submitButton.disabled = false;
+                submitButton.innerHTML = 'Analyze Reviews';
+            }
+        });
+
+        // Initial faculty list load
+        async function loadFacultyList() {
+            try {
+                const response = await fetch('/api/faculty');
+                const data = await response.json();
+                if (data.faculty) {
+                    updateFacultyTable(data.faculty);
+                }
+            } catch (error) {
+                console.error('Error loading faculty list:', error);
+            }
+        }
+
+        // Load faculty list when page loads
+        document.addEventListener('DOMContentLoaded', loadFacultyList);
+
+        // Add clean database functionality
+        document.getElementById('cleanDatabaseBtn').addEventListener('click', async function() {
+            if (!confirm('WARNING: This will permanently delete ALL faculty and their reviews. This action cannot be undone. Are you sure?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/database/clean', {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                alert('Database cleaned successfully');
+                
+                // Clear any displayed results
+                if (results) results.classList.add('hidden');
+                if (analysisText) analysisText.textContent = '';
+                if (document.getElementById('faculty-name')) {
+                    document.getElementById('faculty-name').value = '';
+                }
+                
+                // Clear the faculty table
+                updateFacultyTable([]);
+                
+            } catch (error) {
+                alert(`Error cleaning database: ${error.message}`);
+            }
+        });
     </script>
 </body>
 </html> 

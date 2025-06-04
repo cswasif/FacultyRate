@@ -10,6 +10,9 @@ A private, privacy-focused faculty rating system that uses AI to analyze student
 - 🖼️ Image Processing: Supports feedback submission through text and images using Gemini Vision AI
 - 🌐 RESTful API: Complete API for managing faculty and reviews
 - 🎯 Course-Specific Reviews: Support for course-specific faculty evaluations
+- 🔄 Real-time Updates: Instant UI updates for faculty ratings and reviews
+- 🧹 Database Management: Built-in database cleanup functionality
+- 📈 Smart Recommendations: AI-generated recommendations focused on faculty teaching style
 
 ## System Architecture
 
@@ -93,6 +96,11 @@ Add a review for a faculty member.
 }
 ```
 
+### Database Management
+
+#### POST /api/database/clean
+Clean the database by removing all reviews and resetting faculty ratings.
+
 ### Review Management
 
 #### DELETE /api/faculty/{faculty_id}/reviews
@@ -100,6 +108,31 @@ Delete all reviews for a faculty member.
 
 #### DELETE /api/reviews/course/{course_code}
 Delete all reviews for a specific course.
+
+## Features in Detail
+
+### Real-time Rating Updates
+- Instant updates to faculty ratings when reviews are added or deleted
+- Automatic recalculation of average ratings
+- One decimal place precision for all ratings
+
+### Database Management
+- Built-in database cleanup functionality
+- Accessible via UI button or API endpoint
+- Proper verification of cleanup success
+- Automatic reset of faculty ratings to default values (0.0)
+
+### Smart Recommendations
+- AI-generated recommendations focus on faculty teaching style
+- Clear AVOID/CONSIDER TAKING CLASSES WITH format
+- Elimination of duplicate recommendations
+- Context-aware analysis of student feedback
+
+### UI Enhancements
+- Faculty ratings table with real-time updates
+- Instant faculty list refresh after adding/deleting reviews
+- Improved error handling and user feedback
+- Modern and responsive design
 
 ## Privacy Features
 

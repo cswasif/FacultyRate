@@ -1,59 +1,40 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Delete Review</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 600px;
-            margin: 40px auto;
-            padding: 20px;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-        }
-        input[type="number"] {
-            width: 100px;
-            padding: 5px;
-        }
-        button {
-            background-color: #dc3545;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            cursor: pointer;
-            border-radius: 4px;
-        }
-        button:hover {
-            background-color: #c82333;
-        }
-        #result {
-            margin-top: 20px;
-            padding: 10px;
-            border-radius: 4px;
-        }
-        .success {
-            background-color: #d4edda;
-            color: #155724;
-        }
-        .error {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-    </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delete Review - Faculty Rating System</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
 </head>
-<body>
-    <h1>Delete Review</h1>
-    <div class="form-group">
-        <label for="reviewId">Review ID:</label>
-        <input type="number" id="reviewId" min="1" required>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="max-w-md mx-auto">
+            <h1 class="text-3xl font-bold text-center mb-8">Delete Review</h1>
+            
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <div class="mb-6">
+                    <label for="reviewId" class="block text-sm font-medium text-gray-700 mb-2">Review ID</label>
+                    <input type="number" id="reviewId" min="1" required
+                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500"
+                        placeholder="Enter review ID">
+                </div>
+
+                <div class="flex justify-between items-center">
+                    <button onclick="deleteReview()" 
+                        class="bg-red-500 text-white px-6 py-2 rounded-lg hover:bg-red-600 transition-colors">
+                        Delete Review
+                    </button>
+                    <a href="/" class="text-gray-600 hover:text-gray-800 transition-colors">
+                        Back to Home
+                    </a>
+                </div>
+
+                <div id="result" class="mt-4 p-4 rounded-lg hidden">
+                    <!-- Content will be added by JavaScript -->
+                </div>
+            </div>
+        </div>
     </div>
-    <button onclick="deleteReview()">Delete Review</button>
-    <div id="result" style="display: none;"></div>
 
     <script>
         async function deleteReview() {
@@ -85,7 +66,7 @@
         function showResult(message, success) {
             const resultDiv = document.getElementById('result');
             resultDiv.textContent = message;
-            resultDiv.className = success ? 'success' : 'error';
+            resultDiv.className = `mt-4 p-4 rounded-lg ${success ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
             resultDiv.style.display = 'block';
         }
     </script>

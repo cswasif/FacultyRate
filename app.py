@@ -31,6 +31,11 @@ CORS(app, resources={
     }
 })
 
+# Add favicon route
+@app.route('/favicon.ico')
+def favicon():
+    return app.send_from_directory('static', 'favicon.ico', mimetype='image/vnd.microsoft.icon')
+
 # Increase maximum file size to 32MB
 app.config['MAX_CONTENT_LENGTH'] = 32 * 1024 * 1024  # 32MB max file size
 # Set maximum file count
@@ -205,7 +210,7 @@ def analyze_images_with_gemini(image_paths, faculty_name, course_codes=None):
             course_list = ", ".join(course_codes)
             course_filter = f"Look ONLY for reviews of {faculty_name}'s courses: {course_list}."
         prompt = f"""
-        You are analyzing student feedback about faculty member {faculty_name}.
+        You are a STRICT and CRITICAL faculty review analyzer evaluating {faculty_name}.
         Some feedback may be short, meme-like, or use slang. Interpret all comments, even if brief or informal, as genuine feedback and extract as much meaning as possible. Do not use the word 'Professor' in your response, as the faculty member's title is unknown.
         {course_filter if course_filter else f"Look ONLY for mentions and reviews of {faculty_name}."}
         
@@ -217,14 +222,37 @@ def analyze_images_with_gemini(image_paths, faculty_name, course_codes=None):
         5. Do not include specific dates, class times, or other details that could identify students
         6. If feedback mentions other faculty members, refer to them as "[Other Faculty]"
         
-        IMPORTANT GUIDELINES:
+        RATING GUIDELINES - BE STRICT AND CRITICAL:
+        1. Start all ratings at 1.0/5 and increase ONLY with clear positive evidence
+        2. Teaching effectiveness:
+           - Clear explanations: +1 point
+           - Helpful examples: +1 point
+           - Good lab support: +1 point
+           - Adapts to student needs: +1 point
+        3. Student engagement:
+           - Interactive sessions: +1 point
+           - Encourages questions: +1 point
+           - Provides feedback: +1 point
+           - Available for help: +1 point
+        4. Clarity of presentation:
+           - Well-organized content: +1 point
+           - Clear instructions: +1 point
+           - Good examples: +1 point
+           - Effective materials: +1 point
+        5. Overall professionalism:
+           - Punctual and prepared: +1 point
+           - Respectful to students: +1 point
+           - Fair grading: +1 point
+           - Good time management: +1 point
+        
+        IMPORTANT ANALYSIS RULES:
         1. Focus on DIRECT STUDENT EXPERIENCES, not second-hand accounts
         2. Consider RECENT feedback more heavily than older feedback
         3. Look for SPECIFIC examples and incidents (while maintaining privacy)
         4. Pay attention to both POSITIVE and NEGATIVE comments
         5. Consider CONSISTENCY across multiple reviews
-        6. If feedback is mixed, it should be reflected in the ratings
-        7. Default to 3.0 ONLY if there's no clear evidence
+        6. DO NOT default to 3.0 - ratings must be earned with evidence
+        7. Be especially critical of lab/practical session management
         
         REQUIRED OUTPUT FORMAT:
         Faculty Review Analysis
@@ -236,82 +264,120 @@ def analyze_images_with_gemini(image_paths, faculty_name, course_codes=None):
         DETAILED RATINGS FOR {faculty_name}:
         1. Teaching effectiveness: [X]/5
         - [Detailed evidence and quotes from student feedback, with all personal information redacted]
+        - [List specific examples that earned or lost points]
 
         2. Student engagement: [X]/5
         - [Detailed evidence and quotes from student feedback, with all personal information redacted]
+        - [List specific examples that earned or lost points]
 
         3. Clarity of presentation: [X]/5
         - [Detailed evidence and quotes from student feedback, with all personal information redacted]
+        - [List specific examples that earned or lost points]
 
         4. Overall professionalism: [X]/5
         - [Detailed evidence and quotes from student feedback, with all personal information redacted]
+        - [List specific examples that earned or lost points]
 
         ===========================
         OVERALL RATING FOR {faculty_name}: [X]/5
         ===========================
 
         STUDENT FEEDBACK SUMMARY FOR {faculty_name}:
-        Positive Points:
-        - [List specific positive points with evidence, ensuring student privacy]
+        Critical Issues:
+        - [List major problems and concerns]
+        - [Include specific examples]
 
-        Areas for Improvement:
-        - [List specific areas needing improvement with evidence, ensuring student privacy]
+        Positive Aspects (if any):
+        - [List strengths with concrete evidence]
+        - [Include specific examples]
 
         FINAL RECOMMENDATION:
-        [Clear advice for future students about taking courses with this faculty, maintaining privacy and confidentiality]
+        Based on the analysis above, students should [AVOID/CONSIDER TAKING CLASSES WITH] {faculty_name}.
+
+        Justification:
+        - [List key factors that led to this recommendation]
+        - [Include specific evidence supporting the decision]
         """
+        
         # Prepare images for Gemini
         gemini_images = [Image.open(path) for path in image_paths]
+        
+        # Generate content with prompt and images
         response = model.generate_content([prompt] + gemini_images)
-        # Use the same regex extraction as before
-        ratings = {
-            'teaching_effectiveness': None,
-            'student_engagement': None,
-            'clarity': None,
-            'professionalism': None,
-            'overall': None
-        }
+        
+        # Check if response contains actual feedback
+        if "NO_FEEDBACK_FOUND" in response.text:
+            return None, None, None
+            
+        # Extract ratings using regex
+        ratings = {}
+        
+        # Extract ratings with patterns
         effectiveness_match = re.search(r'Teaching effectiveness:\s*([\d.]+)/5', response.text, re.IGNORECASE)
         engagement_match = re.search(r'Student engagement:\s*([\d.]+)/5', response.text, re.IGNORECASE)
         clarity_match = re.search(r'Clarity of presentation:\s*([\d.]+)/5', response.text, re.IGNORECASE)
         professionalism_match = re.search(r'Overall professionalism:\s*([\d.]+)/5', response.text, re.IGNORECASE)
         overall_match = re.search(r'OVERALL RATING.*?:\s*([\d.]+)/5', response.text, re.IGNORECASE)
-        if effectiveness_match:
-            ratings['teaching_effectiveness'] = float(effectiveness_match.group(1))
-        if engagement_match:
-            ratings['student_engagement'] = float(engagement_match.group(1))
-        if clarity_match:
-            ratings['clarity'] = float(clarity_match.group(1))
-        if professionalism_match:
-            ratings['professionalism'] = float(professionalism_match.group(1))
-        if overall_match:
-            ratings['overall'] = float(overall_match.group(1))
-        else:
-            valid_ratings = [v for v in ratings.values() if v is not None]
-            if valid_ratings:
-                ratings['overall'] = sum(valid_ratings) / len(valid_ratings)
-        recommendation_match = re.search(r'FINAL RECOMMENDATION:\s*(.+?)(?=={3,}|$)', response.text, re.DOTALL)
-        recommendation = recommendation_match.group(1).strip() if recommendation_match else None
-        return response.text, ratings, recommendation
+        
+        # Set ratings from matches with proper error handling
+        try:
+            ratings['teaching_effectiveness'] = float(effectiveness_match.group(1)) if effectiveness_match else 1.0
+            ratings['student_engagement'] = float(engagement_match.group(1)) if engagement_match else 1.0
+            ratings['clarity'] = float(clarity_match.group(1)) if clarity_match else 1.0
+            ratings['professionalism'] = float(professionalism_match.group(1)) if professionalism_match else 1.0
+            
+            if overall_match:
+                ratings['overall'] = float(overall_match.group(1))
+            else:
+                # Calculate overall as average
+                ratings['overall'] = sum([
+                    ratings['teaching_effectiveness'],
+                    ratings['student_engagement'],
+                    ratings['clarity'],
+                    ratings['professionalism']
+                ]) / 4.0
+        except (AttributeError, ValueError) as e:
+            logging.error(f"Error extracting ratings: {str(e)}")
+            # Set default ratings if extraction fails
+            ratings = {
+                'teaching_effectiveness': 1.0,
+                'student_engagement': 1.0,
+                'clarity': 1.0,
+                'professionalism': 1.0,
+                'overall': 1.0
+            }
+        
+        # Extract recommendation - modified to get only the first occurrence
+        recommendation_pattern = r'FINAL RECOMMENDATION:.*?(?=={3,}|$)'
+        recommendation_match = re.search(recommendation_pattern, response.text, re.DOTALL | re.IGNORECASE)
+        recommendation = recommendation_match.group(0).strip() if recommendation_match else None
+            
+        return ratings, response.text.split("FINAL RECOMMENDATION:")[0].strip(), recommendation
+        
     except Exception as e:
         logging.error(f"Error in analyze_images_with_gemini: {str(e)}")
         raise e
 
 @app.route('/')
 def index():
-    """Redirect to API documentation"""
-    return """
-    <h1>Faculty Rating System</h1>
-    <p>This is the main application server. For API documentation, visit:</p>
-    <ul>
-        <li><a href="http://localhost:5001/routes">API Routes Documentation</a></li>
-    </ul>
-    """
+    """Serve the main application page"""
+    return render_template('index.html')
 
 @app.route('/delete-review')
 def delete_review_page():
     """Serve the delete review page"""
     return render_template('delete_review.html')
+
+def get_updated_faculty_list():
+    """Fetch the latest faculty list from the API"""
+    try:
+        response = requests.get('http://localhost:5001/api/faculty')
+        if response.status_code == 200:
+            return response.json()
+        return None
+    except Exception as e:
+        logging.error(f"Error fetching faculty list: {str(e)}")
+        return None
 
 @app.route('/analyze', methods=['POST'])
 def analyze():
@@ -374,8 +440,8 @@ def analyze():
             
         # Analyze images
         try:
-            analysis, ratings, recommendation = analyze_images_with_gemini(saved_files, faculty_name, course_codes if course_codes else None)
-            if not analysis:
+            ratings, analysis, recommendation = analyze_images_with_gemini(saved_files, faculty_name, course_codes if course_codes else None)
+            if not analysis or not ratings:
                 return jsonify({'error': 'Failed to analyze images'}), 500
                 
             # Add faculty to database
@@ -389,10 +455,15 @@ def analyze():
             if response.status_code == 200:
                 faculty_id = response.json()['faculty_id']
                 
-                # Add review
+                # Add review with properly formatted ratings
                 review_data = {
-                    'course_code': course_codes[0] if course_codes else 'UNKNOWN',  # Default to UNKNOWN if no course code
-                    'ratings': ratings,
+                    'course_code': course_codes[0] if course_codes else 'UNKNOWN',
+                    'ratings': {
+                        'teaching_effectiveness': float(ratings['teaching_effectiveness']),
+                        'student_engagement': float(ratings['student_engagement']),
+                        'clarity': float(ratings['clarity']),
+                        'professionalism': float(ratings['professionalism'])
+                    },
                     'feedback': analysis,
                     'recommendation': recommendation,
                     'source_type': 'gemini_analysis'
@@ -429,12 +500,17 @@ OVERALL RATING FOR {faculty_name}: {ratings['overall']}/5
 
 {analysis}
 
-FINAL RECOMMENDATION:
 {recommendation}
-==========================="""
+===========================""".strip()
+
+            # Get updated faculty list
+            updated_faculty = get_updated_faculty_list()
                     
-            # Return the formatted analysis
-            return jsonify({'analysis': formatted_analysis})
+            # Return both the analysis and updated faculty list
+            return jsonify({
+                'analysis': formatted_analysis,
+                'faculty_list': updated_faculty['faculty'] if updated_faculty else []
+            })
             
         except Exception as e:
             logging.error(f"Error analyzing images: {str(e)}")
@@ -443,7 +519,7 @@ FINAL RECOMMENDATION:
             # Clean up saved files
             for filepath in saved_files:
                 try:
-                        os.remove(filepath)
+                    os.remove(filepath)
                 except Exception as e:
                     logging.error(f"Error removing file {filepath}: {str(e)}")
             
